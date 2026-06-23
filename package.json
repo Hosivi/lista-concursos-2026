@@ -1,0 +1,10 @@
+{
+  "name": "lista-concursos",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Planificación de Concursos 2026 con decisiones persistidas en Vercel + Upstash Redis",
+  "dependencies": {
+    "@upstash/redis": "^1.34.3"
+  }
+}

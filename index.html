@@ -107,21 +107,101 @@ details.ev[open]>summary{background:#f0f6ff;border-bottom:1px solid #e3ebf5}
 
 <script>
 (function(){
- var KEY='concursos2026_pub';
- function load(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return{}}}
- function save(){var o={};document.querySelectorAll('.seg input:checked').forEach(function(r){o[r.name]=r.id.charAt(0)});try{localStorage.setItem(KEY,JSON.stringify(o))}catch(e){}; count();}
- function count(){var y=document.querySelectorAll('.r-yes:checked').length,n=document.querySelectorAll('.r-no:checked').length,m=document.querySelectorAll('.r-may:checked').length;
-   set('cy',y);set('cn',n);set('cm',m);}
+ var CACHE='concursos2026_pub';     // local mirror of the server state
+ var QUEUE='concursos2026_queue';   // changes made but not yet confirmed by the server
+ var API='/api/decisions';
+ var VALID={y:1,n:1,m:1};
+
+ function jget(k){try{return JSON.parse(localStorage.getItem(k)||'{}')}catch(e){return{}}}
+ function jset(k,o){try{localStorage.setItem(k,JSON.stringify(o))}catch(e){}}
+
  function set(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
- var s=load();for(var name in s){var el=document.getElementById(s[name]+name.substring(1));if(el)el.checked=true;}
- document.querySelectorAll('.seg input').forEach(function(r){r.addEventListener('change',save)});
+ function count(){
+   set('cy',document.querySelectorAll('.r-yes:checked').length);
+   set('cn',document.querySelectorAll('.r-no:checked').length);
+   set('cm',document.querySelectorAll('.r-may:checked').length);
+ }
+
+ // floating sync indicator (created on the fly, bottom-right)
+ var pill=document.createElement('div');
+ pill.id='syncpill';
+ pill.style.cssText='position:fixed;right:12px;bottom:12px;z-index:60;font:12px/1.3 \'Segoe UI\',system-ui,Arial,sans-serif;padding:6px 11px;border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:opacity .2s;opacity:0;pointer-events:none';
+ document.body.appendChild(pill);
+ var pillTimer;
+ function status(text,kind){
+   pill.textContent=text;
+   pill.style.background={ok:'#e9f8ee',wait:'#fcf4dc',err:'#fdeaea'}[kind]||'#eef2f8';
+   pill.style.color={ok:'#1f9d55',wait:'#b9890f',err:'#d23c3c'}[kind]||'#1c2733';
+   pill.style.opacity='1';
+   clearTimeout(pillTimer);
+   if(kind==='ok')pillTimer=setTimeout(function(){pill.style.opacity='0'},1200);
+ }
+
+ function applyState(s){
+   document.querySelectorAll('.seg input:checked').forEach(function(r){r.checked=false});
+   for(var name in s){var v=s[name];if(!VALID[v])continue;var el=document.getElementById(v+name.substring(1));if(el)el.checked=true;}
+   count();
+ }
+
+ // 1) paint cached state immediately so the list is usable instantly (even offline)
+ applyState(jget(CACHE));
+
+ // 2) reconcile with the server; anything still queued locally wins over the server copy
+ fetch(API).then(function(r){return r.json()}).then(function(srv){
+   var merged=srv||{};
+   var q=jget(QUEUE);
+   for(var n in q){merged[n]=q[n];}
+   jset(CACHE,merged);
+   applyState(merged);
+   flush();
+ }).catch(function(){status('Sin conexión — usando copia local','err');});
+
+ // push every queued change to the server, one by one, removing each on success
+ function flush(){
+   var q=jget(QUEUE);
+   var names=Object.keys(q);
+   if(!names.length)return;
+   status('Guardando…','wait');
+   var chain=Promise.resolve();
+   names.forEach(function(name){
+     chain=chain.then(function(){
+       return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,value:q[name]})})
+         .then(function(r){if(!r.ok)throw 0;var cur=jget(QUEUE);delete cur[name];jset(QUEUE,cur);});
+     });
+   });
+   chain.then(function(){status('Guardado','ok');}).catch(function(){status('Sin conexión — se reintentará','err');});
+ }
+
+ // 3) on every change: update cache + queue optimistically, then push
+ document.querySelectorAll('.seg input').forEach(function(r){
+   r.addEventListener('change',function(){
+     var name=r.name,value=r.id.charAt(0);
+     var c=jget(CACHE);c[name]=value;jset(CACHE,c);
+     var q=jget(QUEUE);q[name]=value;jset(QUEUE,q);
+     count();
+     flush();
+   });
+ });
+
  count();
- // colapsar semanas en pantallas pequeñas al cargar
+
+ // collapse weeks on small screens at load
  if(window.matchMedia('(max-width:760px)').matches){document.querySelectorAll('details.week').forEach(function(w){w.open=false});}
  var ex=document.getElementById('expand'); if(ex)ex.addEventListener('click',function(){document.querySelectorAll('details.week').forEach(function(w){w.open=true});});
  var co=document.getElementById('collapse'); if(co)co.addEventListener('click',function(){document.querySelectorAll('details.week').forEach(function(w){w.open=false});});
  var pr=document.getElementById('prt'); if(pr)pr.addEventListener('click',function(){window.print()});
- var cp=document.getElementById('clr'); if(cp)cp.addEventListener('click',function(){if(!confirm('¿Borrar tus marcas?'))return;document.querySelectorAll('.seg input:checked').forEach(function(r){r.checked=false});save();});
+ var cp=document.getElementById('clr'); if(cp)cp.addEventListener('click',function(){
+   if(!confirm('¿Borrar TODAS las marcas? Esto afecta el servidor y a todo el grupo.'))return;
+   document.querySelectorAll('.seg input:checked').forEach(function(r){r.checked=false});
+   jset(CACHE,{});jset(QUEUE,{});count();
+   status('Guardando…','wait');
+   fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clear:true})})
+     .then(function(r){if(!r.ok)throw 0;status('Borrado','ok');})
+     .catch(function(){status('No se pudo borrar en el servidor','err');});
+ });
+
+ // retry the queue automatically when the connection comes back
+ window.addEventListener('online',flush);
 })();
 </script>
 
