@@ -110,7 +110,24 @@ body.calmode #calview{display:block}
 .callegend{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--muted);margin:0 0 12px}
 .callegend span::before{content:'';display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}
 .callegend .l-lima::before{background:var(--lima)}.callegend .l-prov::before{background:var(--prov)}.callegend .l-sel::before{background:var(--sel)}.callegend .l-upln::before{background:var(--upln)}
-@media(max-width:760px){#calview{padding:12px 8px 60px}.calday{min-height:62px}.calchip{font-size:9.5px}.calgrid .dow{font-size:9px}}
+/* provincia removed from the whole app */
+.col-prov{display:none!important}
+/* UPLN auto items in the list (copies of the "Vamos") */
+.col-upln .upln-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);background:#fbefff;border:1px solid #e5d0ff;border-left:3px solid var(--upln);border-radius:6px;padding:5px 8px;margin:5px 0;line-height:1.25}
+.upln-dot{width:8px;height:8px;border-radius:50%;background:var(--upln);flex-shrink:0}
+.upln-ti{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upln-src{font-size:10px;font-weight:600;color:var(--upln);background:#fff;border:1px solid #e5d0ff;border-radius:20px;padding:1px 7px;white-space:nowrap}
+/* calendar month navigation + filters */
+.calfilters{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.calfbtn{font:600 12px/1 'Segoe UI',system-ui,Arial,sans-serif;padding:6px 12px;cursor:pointer;background:#fff;border:1px solid var(--line);border-radius:20px;color:var(--ink)}
+.calfbtn:hover{background:#f3f4f6}
+.calfbtn.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+.calnav{display:flex;align-items:center;justify-content:center;gap:16px;margin:0 0 14px}
+.calarrow{font-size:20px;line-height:1;width:36px;height:36px;cursor:pointer;background:#fff;border:1px solid var(--line);border-radius:8px;color:var(--ink)}
+.calarrow:hover:not(:disabled){background:#f3f4f6}
+.calarrow:disabled{opacity:.4;cursor:default}
+.calmonthlbl{font-size:16px;font-weight:700;color:var(--navy);text-transform:capitalize;min-width:150px;text-align:center}
+@media(max-width:760px){#calview{padding:12px 8px 60px}.calday{min-height:62px}.calchip{font-size:9.5px}.calgrid .dow{font-size:9px}.calmonthlbl{font-size:14px;min-width:110px}}
 </style></head><body>
 <header><h1>PLANIFICACIÓN DE CONCURSOS 2026</h1>
 <p>Marinera Norteña · De Todas las Sangres + Selectivos Club Libertad · Toca una semana para abrirla</p></header>
@@ -177,6 +194,7 @@ body.calmode #calview{display:block}
    document.querySelectorAll('.seg input:checked').forEach(function(r){r.checked=false});
    for(var name in s){var v=s[name];if(!VALID[v])continue;var el=document.getElementById(v+name.substring(1));if(el)el.checked=true;}
    count();
+   if(typeof refreshUPLN==='function')refreshUPLN();
  }
 
  // 1) paint cached state immediately so the list is usable instantly (even offline)
@@ -215,6 +233,7 @@ body.calmode #calview{display:block}
      var c=jget(CACHE);c[name]=value;jset(CACHE,c);
      var q=jget(QUEUE);q[name]=value;jset(QUEUE,q);
      count();
+     refreshUPLN();
      flush();
    });
  });
@@ -267,9 +286,34 @@ body.calmode #calview{display:block}
    return 'c-lima';
  }
  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+ function colName(el){var col=el.closest('.col');return (col&&col.classList.contains('col-sel'))?'Club Libertad':'Lima';}
+
+ // Fill each week's "Eventos UPLN" column with the contests marked "Vamos" (read-only copies).
+ function refreshUPLN(){
+   document.querySelectorAll('details.week').forEach(function(w){
+     var uplnCol=w.querySelector('.col-upln'); if(!uplnCol)return;
+     uplnCol.querySelectorAll('.upln-auto').forEach(function(x){x.remove();});
+     var note=uplnCol.querySelector('.upln-note'), items=[];
+     w.querySelectorAll('.evwrap').forEach(function(ew){
+       if(ew.closest('.col-prov')||ew.closest('.col-upln'))return;
+       if(!ew.querySelector('.r-yes:checked'))return;
+       var det=ew.querySelector('details.ev'), tiEl=det&&det.querySelector('.ti'), ti=tiEl?tiEl.textContent.trim():'';
+       if(!ti){var sm=det&&det.querySelector('summary');ti=sm?sm.textContent.trim():'Concurso';}
+       items.push({title:ti,origin:colName(ew)});
+     });
+     if(note)note.style.display=items.length?'none':'';
+     items.forEach(function(it){
+       var d=document.createElement('div');
+       d.className='upln-auto upln-item';
+       d.innerHTML='<span class="upln-dot"></span><span class="upln-ti">'+esc(it.title)+'</span><span class="upln-src">'+esc(it.origin)+'</span>';
+       uplnCol.appendChild(d);
+     });
+   });
+ }
  function collectEvents(){
    var out=[];
    document.querySelectorAll('.evwrap').forEach(function(ew){
+     if(ew.closest('.col-prov')||ew.closest('.col-upln'))return;   // Provincia removed; UPLN has no source events
      var det=ew.querySelector('details.ev'); if(!det)return;
      var tiEl=det.querySelector('.ti'), title=tiEl?tiEl.textContent.trim():'';
      if(!title){var sm=det.querySelector('summary');title=sm?sm.textContent.trim():'Concurso';}
@@ -281,42 +325,54 @@ body.calmode #calview{display:block}
      var fm=fecha.match(/(\d{1,2})\s+de\s+([a-záéíóúñ]+)/i); if(!fm)return;
      var dia=parseInt(fm[1],10), mes=MES[fm[2].toLowerCase()];
      if(mes==null||isNaN(dia))return;
-     var st='';
-     if(ew.querySelector('.r-yes:checked'))st='dec-yes';
-     else if(ew.querySelector('.r-no:checked'))st='dec-no';
+     var isYes=!!ew.querySelector('.r-yes:checked');
+     var st=isYes?'dec-yes':(ew.querySelector('.r-no:checked')?'dec-no':'');
      out.push({date:new Date(2026,mes,dia),title:title,col:colClass(det),st:st});
+     if(isYes)out.push({date:new Date(2026,mes,dia),title:title,col:'c-upln',st:'dec-yes'});  // copy to UPLN
    });
    return out;
  }
+ // month navigation + category filter state
+ var calFilter='all', calCur=null;
+ function monthKey(y,m){return y*12+m;}
+ function calFilterBar(){
+   function b(f,l){return '<button class="calfbtn'+(calFilter===f?' active':'')+'" data-f="'+f+'" type="button">'+l+'</button>';}
+   return '<div class="calfilters">'+b('all','Todas')+b('c-lima','Lima')+b('c-sel','Club Libertad')+b('c-upln','UPLN')+'</div>';
+ }
+ function bindCalUI(){
+   var p=document.getElementById('calPrev'), n=document.getElementById('calNext');
+   if(p)p.addEventListener('click',function(){var k=monthKey(calCur.y,calCur.m)-1;calCur={y:Math.floor(k/12),m:((k%12)+12)%12};buildCalendar();});
+   if(n)n.addEventListener('click',function(){var k=monthKey(calCur.y,calCur.m)+1;calCur={y:Math.floor(k/12),m:((k%12)+12)%12};buildCalendar();});
+   document.querySelectorAll('#calview .calfbtn').forEach(function(btn){btn.addEventListener('click',function(){calFilter=btn.getAttribute('data-f');buildCalendar();});});
+ }
  function buildCalendar(){
    var host=document.getElementById('calview'); if(!host)return;
-   var evs=collectEvents();
-   if(!evs.length){host.innerHTML='<div class="calempty">No hay concursos con fecha reconocible para mostrar en el calendario.</div>';return;}
-   var months={};
-   evs.forEach(function(e){var k=e.date.getFullYear()+'-'+e.date.getMonth();(months[k]=months[k]||[]).push(e);});
-   var keys=Object.keys(months).sort(function(a,b){var pa=a.split('-').map(Number),pb=b.split('-').map(Number);return pa[0]-pb[0]||pa[1]-pb[1];});
-   var html='<div class="callegend"><span class="l-lima">Lima</span><span class="l-prov">Provincia</span><span class="l-sel">Selectivos</span><span class="l-upln">UPLN</span></div>';
-   keys.forEach(function(k){
-     var pk=k.split('-').map(Number),yr=pk[0],mo=pk[1];
-     var startDow=(new Date(yr,mo,1).getDay()+6)%7;   // Monday=0
-     var days=new Date(yr,mo+1,0).getDate();
-     var byday={};
-     months[k].forEach(function(e){(byday[e.date.getDate()]=byday[e.date.getDate()]||[]).push(e);});
-     html+='<div class="calmonth"><h3>'+MESNOM[mo]+' '+yr+'</h3><div class="calgrid">';
-     DOW.forEach(function(d){html+='<div class="dow">'+d+'</div>';});
-     for(var i=0;i<startDow;i++)html+='<div class="calday empty"></div>';
-     for(var d=1;d<=days;d++){
-       var cd=new Date(yr,mo,d); cd.setHours(0,0,0,0);
-       var cls='calday';
-       if(cd.getTime()===TODAY.getTime())cls+=' today';
-       else if(cd<TODAY)cls+=' pastday';
-       html+='<div class="'+cls+'"><div class="dn">'+d+'</div>';
-       (byday[d]||[]).forEach(function(e){html+='<span class="calchip '+e.col+' '+e.st+'" title="'+esc(e.title)+'">'+esc(e.title)+'</span>';});
-       html+='</div>';
-     }
-     html+='</div></div>';
-   });
+   var all=collectEvents();
+   if(!all.length){host.innerHTML=calFilterBar()+'<div class="calempty">No hay concursos con fecha para el calendario.</div>';bindCalUI();return;}
+   var min=null,max=null;
+   all.forEach(function(e){var k=monthKey(e.date.getFullYear(),e.date.getMonth());if(min==null||k<min)min=k;if(max==null||k>max)max=k;});
+   if(!calCur){var tk=monthKey(TODAY.getFullYear(),TODAY.getMonth()),ck=Math.min(Math.max(tk,min),max);calCur={y:Math.floor(ck/12),m:ck%12};}
+   var y=calCur.y, mo=calCur.m, curK=monthKey(y,mo);
+   var evs=calFilter==='all'?all:all.filter(function(e){return e.col===calFilter;});
+   var byday={};
+   evs.forEach(function(e){if(e.date.getFullYear()===y&&e.date.getMonth()===mo)(byday[e.date.getDate()]=byday[e.date.getDate()]||[]).push(e);});
+   var startDow=(new Date(y,mo,1).getDay()+6)%7, days=new Date(y,mo+1,0).getDate();
+   var html=calFilterBar();
+   html+='<div class="calnav"><button class="calarrow" id="calPrev" type="button"'+(curK<=min?' disabled':'')+'>‹</button><span class="calmonthlbl">'+MESNOM[mo]+' '+y+'</span><button class="calarrow" id="calNext" type="button"'+(curK>=max?' disabled':'')+'>›</button></div>';
+   html+='<div class="calmonth"><div class="calgrid">';
+   DOW.forEach(function(d){html+='<div class="dow">'+d+'</div>';});
+   for(var i=0;i<startDow;i++)html+='<div class="calday empty"></div>';
+   for(var d=1;d<=days;d++){
+     var cd=new Date(y,mo,d); cd.setHours(0,0,0,0);
+     var cls='calday';
+     if(cd.getTime()===TODAY.getTime())cls+=' today'; else if(cd<TODAY)cls+=' pastday';
+     html+='<div class="'+cls+'"><div class="dn">'+d+'</div>';
+     (byday[d]||[]).forEach(function(e){html+='<span class="calchip '+e.col+' '+e.st+'" title="'+esc(e.title)+'">'+esc(e.title)+'</span>';});
+     html+='</div>';
+   }
+   html+='</div></div>';
    host.innerHTML=html;
+   bindCalUI();
  }
 
  // ---- view toggle (Lista / Calendario) ----
